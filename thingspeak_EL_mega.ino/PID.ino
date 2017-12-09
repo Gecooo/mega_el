@@ -1,5 +1,7 @@
 void PID_termostat()
 {
+  if (flag_work) // если нажата кнопка включить запускаем работу пелеть и ПИД регулятора
+  {
   Input = Coldrad;
   double gap = abs(Setpoint-Input); //distance away from setpoint
   if (gap < 1.00)
@@ -24,5 +26,12 @@ void PID_termostat()
       myPID.SetMode(AUTOMATIC);
       pwmWrite(INT1, Output);
       digitalWrite(INT2, LOW);
+    }
+  }
+  else
+  {
+    pwmWrite(INT1, 0);
+      digitalWrite(INT2, LOW);
   }
 }
+

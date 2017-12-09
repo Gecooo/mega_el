@@ -11,6 +11,21 @@
 #include <Wire.h>
 #include <ELClient.h>
 #include <ELClientRest.h>
+#include "DS3231.h"
+#include "ClosedCube_HDC1080.h"
+
+ClosedCube_HDC1080 hdc1080;
+
+/// Часы ////
+DS3231 clock;
+RTClib dt;
+unsigned int startDayUnixtime; // день старта в памяти
+unsigned int currentTime_day;           //текущий день в юникс-формате
+unsigned int currentDay;                // прошло дней с момента запуска
+float temp3231;              //датчик температуры встроенный в часы
+byte tMSB, tLSB;
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+/////////////////////
 
 #define DHTPIN 7     // what pin we're connected to
 #define DHTTYPE DHT22   // DHT 22  (AM2302)
@@ -33,6 +48,8 @@ float HRad;
 float Coldrad;
 float h;
 float t;
+float hdc_t;
+float hdc_h;
 const int ledPin =  LED_BUILTIN;// the number of the LED pin
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
@@ -41,9 +58,9 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
 double Input, Output, Setpoint=3;
-double aggKp=250.0, aggKi=25.2, aggKd=35.0;       //настройки PID-регулятора
+double aggKp=160.0, aggKi=10.2, aggKd=8.0;       //настройки PID-регулятора
 //double consKp=8000, consKi=153.0, consKd=10.3;
-double consKp=160, consKi=4.2, consKd=15.0;
+double consKp=100, consKi=4.0, consKd=5.5;
 
 PID myPID(&Input, &Output, &Setpoint, consKp, consKi, consKd, REVERSE);       //PID-регулятор элемента пелетье
 
@@ -60,12 +77,16 @@ int32_t frequency = 24900; //frequency (in Hz)
 unsigned long previousMillis = 0;
 unsigned long prevMillissens = 0;
 unsigned long prevMillisLCD = 0;
+unsigned long prevMillishdc = 0;
+
+volatile bool flag_work = 0; // флаг кнопки включения процесса
 
 char *api_key = "EPY2NM6967MVDEM5";
 // expand buffer size to your needs
 #define BUFLEN 266
 
 #define IRPIN 22     // what pin we're connected to
+#define VKL 3 // 3 с подтяшкой к +5, кнопка включения процесса
 
 ///////Memory////////
 extern void *__brkval;
@@ -93,9 +114,9 @@ void wifiCb(void *response) {
 void mqttConnected(void* response) {
   Serial.println("MQTT connected!");
   mqtt.subscribe("/esp-link/setpoint");
-  mqtt.subscribe("/hello/world/#");
   mqtt.subscribe("/esp-link/led");
   mqtt.subscribe("/esp-link/ir");
+  mqtt.subscribe("/esp-link/vkl");
   //mqtt.subscribe("/esp-link/2", 1);
   //mqtt.publish("/esp-link/0", "test1");
   connected = true;
@@ -148,6 +169,20 @@ void mqttData(void* response) {
 Setpoint = data.toDouble();
  EEPROM_write(10, Setpoint); 
   }
+
+  if (topic == "/esp-link/vkl") {
+    if (data == "1") {
+      flag_work = 1;
+      EEPROM_write(11, flag_work);      // записываем в память статус флага работы, чтобы при перзагрузки контроллера стартовал с этого же статуса
+      EEPROM_write(1, currentTime_day); //записываем день старта программы
+    }
+    else if (data == "0") {
+      flag_work = 0;
+      EEPROM_write(11, flag_work);  // записываем в память статус флага работы, чтобы при перзагрузки контроллера стартовал с этого же статуса
+      EEPROM_write(1, 0);           //когда выключили процесс, стираем дату начала процесса
+    }
+  }
+  
 }
 
 void mqttPublished(void* response) {
@@ -156,7 +191,14 @@ void mqttPublished(void* response) {
 
 void setup() {
   
-  Serial.begin(9600); 
+  Serial.begin(9600);
+  Wire.begin();
+  hdc1080.begin(0x40); 
+  hdc1080.setResolution(1, 01);
+  pinMode (IRPIN, OUTPUT); //устанавливаем пин 5 как выход
+  //pinMode (VKL, INPUT);
+  attachInterrupt(1, myInterrupt, FALLING); //подключить прерывания на первый таймер пин 3
+  digitalWrite(IRPIN,LOW);
   Serial.println("");
   Serial.println("EL-Client starting! V6");
    esp.wifiCb.attach(wifiCb); // wifi status change callback, optional (delete if not desired)
@@ -229,6 +271,7 @@ Serial.println("esp.GetWifiStatus()");
   lcd.clear();
 
 EEPROM_read(10, Setpoint);
+EEPROM_read(11, flag_work);
 }
 
 static int count;
@@ -236,7 +279,21 @@ static uint32_t last;
 
 void loop() {
  int val ;
- 
+
+///////////////////
+DateTime now = dt.now();
+  currentTime_day = (now.unixtime() / 86400L);  // текущий день
+  //EEPROM_read(1, startDayUnixtime);  // здесь в каждом цикле идет запрос о дне работы 
+  //currentDay = (currentTime_day - startDayUnixtime);  //но нет смысла спрашивать каждый раз, можно настроить запрос по времени
+// if (currentDay < 3) {   // если день работы менее 3 то влажность 85%
+//// if (currentHour <= 72) {
+//  //Setpoint = map(currentHour * 10, 0, 720, 170, 70);
+//  Setpoint3 = 85.00;
+// // Setpoint = Setpoint / 10;
+//  Setpoint = 16.00;
+//  }
+/////////////////////////
+  
   Sens();
   LCD();
   PID_termostat ();
@@ -252,8 +309,8 @@ void loop() {
     previousMillis = currentMillis;
 
    
-      String memoryFreeString = String(memoryFree());
-      const char *memoryFreeChar = memoryFreeString.c_str(); 
+//      String memoryFreeString = String(memoryFree());
+//      const char *memoryFreeChar = memoryFreeString.c_str(); 
 
       String ColdradString = String(Coldrad);
       const char *ColdradChar = ColdradString.c_str(); 
@@ -269,6 +326,15 @@ void loop() {
 
       String HRadString = String(HRad);
       const char *HRadChar = HRadString.c_str();
+      
+      String SetpointString = String(Setpoint);
+      const char *SetpointChar = SetpointString.c_str();
+
+      String hdc_tString = String(hdc_t);
+      const char *hdc_tChar = hdc_tString.c_str();
+
+      String hdc_hString = String(hdc_h);
+      const char *hdc_hChar = hdc_hString.c_str();
 //
        
 //        
@@ -281,8 +347,12 @@ void loop() {
     // Copy the field number and value into the buffer
     // If you have more than one field to update,
     // repeat and change field1 to field2, field3, ...
+    
+//    sprintf(path_data + strlen(path_data), "%s", "&field1=");
+//    sprintf(path_data + strlen(path_data), "%s", memoryFreeChar);
+
     sprintf(path_data + strlen(path_data), "%s", "&field1=");
-    sprintf(path_data + strlen(path_data), "%s", memoryFreeChar);
+    sprintf(path_data + strlen(path_data), "%s", SetpointChar);
 
      sprintf(path_data + strlen(path_data), "%s", "&field2=");
      sprintf(path_data + strlen(path_data), "%s", ColdradChar);
@@ -298,6 +368,14 @@ void loop() {
 
     sprintf(path_data + strlen(path_data), "%s", "&field6=");
     sprintf(path_data + strlen(path_data), "%s", HRadChar);
+
+    sprintf(path_data + strlen(path_data), "%s", "&field7=");
+    sprintf(path_data + strlen(path_data), "%s", hdc_tChar);
+
+    sprintf(path_data + strlen(path_data), "%s", "&field8=");
+    sprintf(path_data + strlen(path_data), "%s", hdc_hChar);
+
+    
     
     // Send PUT request to thingspeak.com
     rest.post(path_data,"");  
@@ -319,8 +397,7 @@ void loop() {
       Serial.print("Response: ");
       Serial.println(response);
     }
-    // Send next data in 20 seconds
-    //delay(3000);
+ 
     
   if (connected) {
     Serial.println("publishing");
@@ -349,6 +426,7 @@ void loop() {
 wdt_reset();
 }
 
+///// показывает свободную память ///////
 int memoryFree() {
   int freeValue;
   if ((int)__brkval == 0)
@@ -357,3 +435,11 @@ int memoryFree() {
     freeValue = ((int)&freeValue) - ((int)__brkval);
   return freeValue;
 }
+
+void myInterrupt() {
+  flag_work = !flag_work;
+  EEPROM_write(11, flag_work);    //записываем в память статус работы программы, чтобы при перезагрузки контроллера стартовать с этого же статуса
+  if (flag_work) { EEPROM_write(1, currentTime_day);} //записываем в память день старта программы
+  else EEPROM_write(1, 0);                            //стираем день старта программы
+}
+

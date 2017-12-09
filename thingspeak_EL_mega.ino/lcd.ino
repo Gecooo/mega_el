@@ -21,3 +21,18 @@ void LCD()
   lcd.print(h);
   }
 }
+
+// время //
+//    lcd.setCursor(15,3);
+//    lcdDigits(now.hour()); lcd.print(":"); lcdDigits(now.minute()); //lcd.print(":");lcdDigits(now.second(), DEC);  
+
+
+
+  void lcdDigits(int digits){
+   // Функция для красивого вывода времени. Выводит ноль перед
+   // односимвольными числами. &amp;amp;quot;5&amp;amp;quot; будет выведено как &amp;amp;quot;05&amp;amp;quot;
+   lcd.print("");
+   if(digits < 10)
+   lcd.print('0');
+   lcd.print(digits);  
+}
