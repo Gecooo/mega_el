@@ -158,9 +158,13 @@ void mqttData(void* response) {
   if (topic == "/esp-link/ir") {
     if (data == "1") {
       digitalWrite(IRPIN, HIGH);
+      lcd.setCursor(13, 0);
+      lcd.print("IR:On ");
     }
     else if (data == "0") {
       digitalWrite(IRPIN, LOW);
+      lcd.setCursor(13, 0);
+      lcd.print("IR:Off");
     }
   }
 
