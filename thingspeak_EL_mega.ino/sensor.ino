@@ -18,6 +18,7 @@ void Sens()
     prevMillishdc = hdcMillis;
     hdc_t = hdc1080.readTemperature();
     hdc_h = hdc1080.readHumidity();
+    Abshum = (6.112*pow(2.718281828,(17.67*hdc_t)/(hdc_t+243.5))*hdc_h*2.1674)/(273.15+hdc_t);
   }
 }
 
