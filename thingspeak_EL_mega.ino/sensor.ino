@@ -6,6 +6,7 @@ void Sens()
   if (sensMillis - prevMillissens >= 1000) {
     // save the last time you blinked the LED
   prevMillissens = sensMillis;
+  tempout = clock.getTemperature();
   sensors.requestTemperatures();
   HRad = sensors.getTempC(sensor4);
   Coldrad = sensors.getTempC(sensor3);

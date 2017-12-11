@@ -50,6 +50,7 @@ float h;
 float t;
 float hdc_t;
 float hdc_h;
+float tempout;            // температруа снаружи, датчик в часах
 const int ledPin =  LED_BUILTIN;// the number of the LED pin
 // Setup a oneWire instance to communicate with any OneWire devices (not just Maxim/Dallas temperature ICs)
 OneWire oneWire(ONE_WIRE_BUS);
