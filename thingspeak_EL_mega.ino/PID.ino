@@ -27,11 +27,14 @@ void PID_termostat()
       pwmWrite(INT1, Output);
       digitalWrite(INT2, LOW);
     }
+   
   }
   else
   {
     pwmWrite(INT1, 0);
       digitalWrite(INT2, LOW);
   }
+
+  
 }
 

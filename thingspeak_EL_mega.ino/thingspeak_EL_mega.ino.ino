@@ -19,7 +19,7 @@ ClosedCube_HDC1080 hdc1080;
 /// Часы ////
 DS3231 clock;
 RTClib dt;
-unsigned int startDayUnixtime; // день старта в памяти
+
 unsigned int currentTime_day;           //текущий день в юникс-формате
 unsigned int currentDay;                // прошло дней с момента запуска
 float temp3231;              //датчик температуры встроенный в часы
@@ -42,6 +42,7 @@ ELClientCmd cmd(&esp);
 // Initialize the MQTT client
 ELClientMqtt mqtt(&esp);
 bool connected;
+bool nagrevmqtt = false;
 boolean wifiConnected = false;
 const unsigned long SendThingspeak = 15000;
 float HRad;
@@ -59,7 +60,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
 DallasTemperature sensors(&oneWire);
 
-double Input, Output, Setpoint=3;
+double Input, Output, Setpoint=0;
 double aggKp=160.0, aggKi=10.2, aggKd=8.0;       //настройки PID-регулятора
 //double consKp=8000, consKi=153.0, consKd=10.3;
 double consKp=100, consKi=4.0, consKd=5.5;
@@ -89,7 +90,8 @@ char *api_key = "EPY2NM6967MVDEM5";
 
 #define IRPIN 22     // what pin we're connected to
 #define VKL 3 // 3 с подтяшкой к +5, кнопка включения процесса
-
+#define nagrev 26   //нагреватель
+#define vozduh 28   //воздух
 ///////Memory////////
 extern void *__brkval;
 extern int __bss_end;
@@ -115,10 +117,12 @@ void wifiCb(void *response) {
 // Callback when MQTT is connected
 void mqttConnected(void* response) {
   Serial.println("MQTT connected!");
-  mqtt.subscribe("/esp-link/setpoint");
+  mqtt.subscribe("/esp-link/vozduh");
   mqtt.subscribe("/esp-link/led");
   mqtt.subscribe("/esp-link/ir");
   mqtt.subscribe("/esp-link/vkl");
+  mqtt.subscribe("/esp-link/nagrev");
+  
   //mqtt.subscribe("/esp-link/2", 1);
   //mqtt.publish("/esp-link/0", "test1");
   connected = true;
@@ -155,26 +159,38 @@ void mqttData(void* response) {
     }
   }
 
-  if (topic == "/esp-link/ir") {
+  if (topic == "/esp-link/vozduh") {
     if (data == "1") {
-      digitalWrite(IRPIN, HIGH);
-      lcd.setCursor(13, 0);
-      lcd.print("IR:On ");
+      digitalWrite(vozduh, HIGH); // включить нагреватель
+      //nagrevmqtt = true;
     }
     else if (data == "0") {
-      digitalWrite(IRPIN, LOW);
-      lcd.setCursor(13, 0);
-      lcd.print("IR:Off");
+      digitalWrite(vozduh, LOW); // нагрев выкл
+     // nagrevmqtt = false;
     }
   }
 
-  if (topic == "/esp-link/setpoint")
-  {
-    
-   // (atof(myStr));
-Setpoint = data.toDouble();
- EEPROM_write(10, Setpoint); 
+  if (topic == "/esp-link/ir") {
+    if (data == "1") {
+      digitalWrite(IRPIN, HIGH);
+      lcd.setCursor(15, 0);
+      lcd.print("On ");
+    }
+    else if (data == "0") {
+      digitalWrite(IRPIN, LOW);
+      lcd.setCursor(15, 0);
+      lcd.print("Off");
+    }
   }
+
+
+//  if (topic == "/esp-link/setpoint")
+//  {
+//    
+//   // (atof(myStr));
+//Setpoint = data.toDouble();
+// EEPROM_write(10, Setpoint); 
+//  }
 
   if (topic == "/esp-link/vkl") {
     if (data == "1") {
@@ -202,11 +218,15 @@ void setup() {
   hdc1080.begin(0x40); 
   hdc1080.setResolution(1, 01);
   pinMode (IRPIN, OUTPUT); //устанавливаем пин 5 как выход
-  //pinMode (VKL, INPUT);
-  attachInterrupt(1, myInterrupt, FALLING); //подключить прерывания на первый таймер пин 3
   digitalWrite(IRPIN,LOW);
+  //pinMode (VKL, INPUT);
+  pinMode(nagrev, OUTPUT); 
+  digitalWrite(nagrev, LOW); // нагреватель выключен
+  pinMode(vozduh, OUTPUT); 
+  digitalWrite(vozduh, LOW); // нагреватель выключен
+  attachInterrupt(1, myInterrupt, FALLING); //подключить прерывания на первый таймер пин 3
   Serial.println("");
-  Serial.println("EL-Client starting! V6");
+  Serial.println("EL-Client starting!");
    esp.wifiCb.attach(wifiCb); // wifi status change callback, optional (delete if not desired)
  bool ok;
   do {
@@ -276,7 +296,7 @@ Serial.println("esp.GetWifiStatus()");
     delay(2000);               // ждем 1 секунду
   lcd.clear();
 
-EEPROM_read(10, Setpoint);
+//EEPROM_read(10, Setpoint);
 EEPROM_read(11, flag_work);
 }
 
@@ -285,12 +305,13 @@ static uint32_t last;
 
 void loop() {
  int val ;
+unsigned int startDayUnixtime; // день старта в памяти
 
 ///////////////////
 DateTime now = dt.now();
   currentTime_day = (now.unixtime() / 86400L);  // текущий день
-  //EEPROM_read(1, startDayUnixtime);  // здесь в каждом цикле идет запрос о дне работы 
-  //currentDay = (currentTime_day - startDayUnixtime);  //но нет смысла спрашивать каждый раз, можно настроить запрос по времени
+  EEPROM_read(1, startDayUnixtime);  // здесь в каждом цикле идет запрос о дне работы 
+  currentDay = (currentTime_day - startDayUnixtime);  //но нет смысла спрашивать каждый раз, можно настроить запрос по времени
 // if (currentDay < 3) {   // если день работы менее 3 то влажность 85%
 //// if (currentHour <= 72) {
 //  //Setpoint = map(currentHour * 10, 0, 720, 170, 70);
@@ -303,6 +324,7 @@ DateTime now = dt.now();
   Sens();
   LCD();
   PID_termostat ();
+  Nagrev ();
   
   esp.Process();
 
@@ -315,8 +337,8 @@ DateTime now = dt.now();
     previousMillis = currentMillis;
 
    
-//      String memoryFreeString = String(memoryFree());
-//      const char *memoryFreeChar = memoryFreeString.c_str(); 
+      String tempoutString = String(tempout);
+      const char *tempoutChar = tempoutString.c_str(); 
 
       String ColdradString = String(Coldrad);
       const char *ColdradChar = ColdradString.c_str(); 
@@ -327,14 +349,14 @@ DateTime now = dt.now();
       String tString = String(t);
       const char *tChar = tString.c_str(); 
 
-      String OutputString = String(Output);
-      const char *OutputChar = OutputString.c_str();
+//      String OutputString = String(Output);
+//      const char *OutputChar = OutputString.c_str();
 
       String HRadString = String(HRad);
       const char *HRadChar = HRadString.c_str();
       
-      String SetpointString = String(Setpoint);
-      const char *SetpointChar = SetpointString.c_str();
+//      String SetpointString = String(Setpoint);
+//      const char *SetpointChar = SetpointString.c_str();
 
       String hdc_tString = String(hdc_t);
       const char *hdc_tChar = hdc_tString.c_str();
@@ -354,11 +376,11 @@ DateTime now = dt.now();
     // If you have more than one field to update,
     // repeat and change field1 to field2, field3, ...
     
-//    sprintf(path_data + strlen(path_data), "%s", "&field1=");
-//    sprintf(path_data + strlen(path_data), "%s", memoryFreeChar);
-
     sprintf(path_data + strlen(path_data), "%s", "&field1=");
-    sprintf(path_data + strlen(path_data), "%s", SetpointChar);
+    sprintf(path_data + strlen(path_data), "%s", tempoutChar);
+
+//    sprintf(path_data + strlen(path_data), "%s", "&field1=");
+//    sprintf(path_data + strlen(path_data), "%s", SetpointChar);
 
      sprintf(path_data + strlen(path_data), "%s", "&field2=");
      sprintf(path_data + strlen(path_data), "%s", ColdradChar);
@@ -369,8 +391,8 @@ DateTime now = dt.now();
     sprintf(path_data + strlen(path_data), "%s", "&field4=");
     sprintf(path_data + strlen(path_data), "%s", hChar);
 
-    sprintf(path_data + strlen(path_data), "%s", "&field5=");
-    sprintf(path_data + strlen(path_data), "%s", OutputChar);
+//    sprintf(path_data + strlen(path_data), "%s", "&field5=");
+//    sprintf(path_data + strlen(path_data), "%s", OutputChar);
 
     sprintf(path_data + strlen(path_data), "%s", "&field6=");
     sprintf(path_data + strlen(path_data), "%s", HRadChar);
@@ -403,30 +425,32 @@ DateTime now = dt.now();
       Serial.print("Response: ");
       Serial.println(response);
     }
- 
-    
-  if (connected) {
-    Serial.println("publishing");
-    char buf[12];
-    char buf1[8];
-    val = digitalRead(ledPin);
-   itoa(count++, buf, 10);        //Конвертирование целочисленных данных в строку, преобразование int
-   itoa(val, buf1, 2);
-   
-    
-   mqtt.publish("/esp-link/led", buf1);
-    
-   dtostrf(Setpoint, 2, 2, buf1);   //Конвертирование из float(double) в строку
-   mqtt.publish("/esp-link/setpoint", buf1);
+   }
 
-//   itoa(count+99, buf, 10);
-//   mqtt.publish("/hello/world/arduino", buf);
+    if (connected && (millis()-last) > 4000) {
+    Serial.println("publishing");
+    //char buf[12];
+    char buf1[8];
+    val = digitalRead(ledPin);          //Конвертирование целочисленных данных в строку, преобразование int
+    itoa(val, buf1, 2);
+    mqtt.publish("/esp-link/led", buf1);
+
+    val = digitalRead(nagrev);          //Конвертирование целочисленных данных в строку, преобразование int
+    itoa(val, buf1, 2);
+    mqtt.publish("/esp-link/nagrev", buf1);
+
+    val = digitalRead(vozduh);
+    itoa(val, buf1, 2);
+    mqtt.publish("/esp-link/vozduh", buf1);
+
+    val = flag_work;
+    itoa(val, buf1, 2);
+    mqtt.publish("/esp-link/vkl", buf1);
 
 //    uint32_t t = cmd.GetTime();
 //    Serial.print("Time: "); Serial.println(t);
+     last = millis();
       }
-    }
-  
   }
   
 wdt_reset();
@@ -446,6 +470,6 @@ void myInterrupt() {
   flag_work = !flag_work;
   EEPROM_write(11, flag_work);    //записываем в память статус работы программы, чтобы при перезагрузки контроллера стартовать с этого же статуса
   if (flag_work) { EEPROM_write(1, currentTime_day);} //записываем в память день старта программы
-  else EEPROM_write(1, 0);                            //стираем день старта программы
+  if (!flag_work){ EEPROM_write(1, 0);}                            //стираем день старта программы
 }
 
