@@ -6,10 +6,10 @@ void LCD()
   lcd.setCursor(0, 0);
   lcd.print("H.RAD:     "); //отсылка в сериал для Espeasy
   lcd.setCursor(6, 0);
-  lcd.print(HRad);
+  lcd.print(HRad,1);
   lcd.setCursor(0, 1);
-  lcd.print("C.Rad:        ");
-  lcd.setCursor(6, 1);
+  lcd.print("CRad:     ");
+  lcd.setCursor(5, 1);
   lcd.print(Coldrad,1);
   
   //EEPROM_read(1, memoryDay);
@@ -17,28 +17,28 @@ void LCD()
   lcd.print(currentDay);
   
   lcd.setCursor(0, 2);
-  lcd.print("Tin:        ");
+  lcd.print("Tin:     ");
   lcd.setCursor(4, 2);
-  lcd.print(hdc_t);
+  lcd.print(hdc_t,1);
   lcd.setCursor(10, 2);
-  lcd.print("Tout:    ");
+  lcd.print("Tout:     ");
   lcd.setCursor(15, 2);
   lcd.print(tempout,1);
   lcd.setCursor(0, 3);
-  lcd.print("Hum:         ");
+  lcd.print("Hum:     ");
   lcd.setCursor(4, 3);
-  lcd.print(hdc_h);
+  lcd.print(hdc_h,1);
   lcd.setCursor(10, 3);
-  lcd.print("AHum:    ");
+  lcd.print("AHum:     ");
   lcd.setCursor(15, 3);
   lcd.print(Abshum,1);
-  }
+  
   lcd.setCursor(12, 0);
   lcd.print("IR:");
+  lcd.setCursor(12, 1);
+  lcd.print("DAY=");
+  }
   
-  
-    lcd.setCursor(10, 1);
-    lcd.print("DAY= ");
     
     
 }

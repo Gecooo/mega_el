@@ -92,6 +92,7 @@ char *api_key = "EPY2NM6967MVDEM5";
 #define VKL 3 // 3 с подтяшкой к +5, кнопка включения процесса
 #define nagrev 26   //нагреватель
 #define vozduh 28   //воздух
+#define buzzer_pin 9                   //пищалка
 ///////Memory////////
 extern void *__brkval;
 extern int __bss_end;
@@ -298,6 +299,7 @@ Serial.println("esp.GetWifiStatus()");
 
 //EEPROM_read(10, Setpoint);
 EEPROM_read(11, flag_work);
+if(flag_work) tone(buzzer_pin, 2000, 50);
 }
 
 static int count;
@@ -471,5 +473,10 @@ void myInterrupt() {
   EEPROM_write(11, flag_work);    //записываем в память статус работы программы, чтобы при перезагрузки контроллера стартовать с этого же статуса
   if (flag_work) { EEPROM_write(1, currentTime_day);} //записываем в память день старта программы
   if (!flag_work){ EEPROM_write(1, 0);}                            //стираем день старта программы
+}
+
+//пищалка////////////////////////////////////////////////////////////////////////
+void buzzer(int duration) {
+  tone(buzzer_pin, 2000, duration);
 }
 
