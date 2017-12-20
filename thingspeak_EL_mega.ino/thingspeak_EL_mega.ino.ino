@@ -44,6 +44,7 @@ ELClientMqtt mqtt(&esp);
 bool connected;
 bool nagrevmqtt = false;
 boolean wifiConnected = false;
+boolean vozduhmqtt = false;
 const unsigned long SendThingspeak = 15000;
 float HRad;
 float Coldrad;
@@ -90,8 +91,8 @@ char *api_key = "EPY2NM6967MVDEM5";
 
 #define IRPIN 22     // what pin we're connected to
 #define VKL 3 // 3 с подтяшкой к +5, кнопка включения процесса
-#define nagrev 26   //нагреватель
-#define vozduh 28   //воздух
+#define nagrev_pin 26   //нагреватель
+#define vozduh_pin 28   //воздух
 #define buzzer_pin 9                   //пищалка
 ///////Memory////////
 extern void *__brkval;
@@ -163,11 +164,22 @@ void mqttData(void* response) {
   if (topic == "/esp-link/vozduh") {
     if (data == "1") {
       digitalWrite(vozduh, HIGH); // включить нагреватель
-      //nagrevmqtt = true;
+      vozduhmqtt = true;
     }
     else if (data == "0") {
       digitalWrite(vozduh, LOW); // нагрев выкл
-     // nagrevmqtt = false;
+     vozduhmqtt = false;
+    }
+  }
+
+    if (topic == "/esp-link/nagrev") {
+    if (data == "1") {
+      //digitalWrite(nagrev_pin, HIGH); // включить нагреватель
+      nagrevmqtt = true;
+    }
+    else if (data == "0") {
+      //digitalWrite(vozduh, LOW); // нагрев выкл
+     nagrevmqtt = false;
     }
   }
 
@@ -196,6 +208,7 @@ void mqttData(void* response) {
   if (topic == "/esp-link/vkl") {
     if (data == "1") {
       flag_work = 1;
+      tone(buzzer_pin, 2000, 50);
       EEPROM_write(11, flag_work);      // записываем в память статус флага работы, чтобы при перзагрузки контроллера стартовал с этого же статуса
       EEPROM_write(1, currentTime_day); //записываем день старта программы
     }
@@ -221,10 +234,11 @@ void setup() {
   pinMode (IRPIN, OUTPUT); //устанавливаем пин 5 как выход
   digitalWrite(IRPIN,LOW);
   //pinMode (VKL, INPUT);
-  pinMode(nagrev, OUTPUT); 
-  digitalWrite(nagrev, LOW); // нагреватель выключен
-  pinMode(vozduh, OUTPUT); 
-  digitalWrite(vozduh, LOW); // нагреватель выключен
+  pinMode(nagrev_pin, OUTPUT); 
+  digitalWrite(nagrev_pin, LOW); // нагреватель выключен
+  pinMode(vozduh_pin, OUTPUT); 
+  digitalWrite(vozduh_pin, LOW); // нагреватель выключен
+  pinMode (buzzer_pin, OUTPUT); //пищалка
   attachInterrupt(1, myInterrupt, FALLING); //подключить прерывания на первый таймер пин 3
   Serial.println("");
   Serial.println("EL-Client starting!");
@@ -273,7 +287,7 @@ Serial.println("esp.GetWifiStatus()");
   InitTimersSafe();
   SetPinFrequencySafe(INT1, frequency);
   SetPinFrequencySafe(INT2, frequency);
-  myPID.SetOutputLimits(80,255);    //лимит PID  
+  myPID.SetOutputLimits(80,254);    //лимит PID  
   dht.begin();
   sensors.begin();
   sensors.setResolution(sensor4, 10);
@@ -322,13 +336,14 @@ DateTime now = dt.now();
 //  Setpoint = 16.00;
 //  }
 /////////////////////////
-  
+  esp.Process();
   Sens();
   LCD();
+  vozduh();
   PID_termostat ();
   Nagrev ();
   
-  esp.Process();
+  
 
   
  // if we're connected make an REST request
@@ -437,11 +452,11 @@ DateTime now = dt.now();
     itoa(val, buf1, 2);
     mqtt.publish("/esp-link/led", buf1);
 
-    val = digitalRead(nagrev);          //Конвертирование целочисленных данных в строку, преобразование int
+    val = digitalRead(nagrev_pin);          //Конвертирование целочисленных данных в строку, преобразование int
     itoa(val, buf1, 2);
     mqtt.publish("/esp-link/nagrev", buf1);
 
-    val = digitalRead(vozduh);
+    val = digitalRead(vozduh_pin);
     itoa(val, buf1, 2);
     mqtt.publish("/esp-link/vozduh", buf1);
 
@@ -471,7 +486,7 @@ int memoryFree() {
 void myInterrupt() {
   flag_work = !flag_work;
   EEPROM_write(11, flag_work);    //записываем в память статус работы программы, чтобы при перезагрузки контроллера стартовать с этого же статуса
-  if (flag_work) { EEPROM_write(1, currentTime_day);} //записываем в память день старта программы
+  if (flag_work) { EEPROM_write(1, currentTime_day); tone(buzzer_pin, 2000, 100);} //записываем в память день старта программы
   if (!flag_work){ EEPROM_write(1, 0);}                            //стираем день старта программы
 }
 
@@ -480,3 +495,4 @@ void buzzer(int duration) {
   tone(buzzer_pin, 2000, duration);
 }
 
+ 

@@ -13,8 +13,7 @@ void LCD()
   lcd.print(Coldrad,1);
   
   //EEPROM_read(1, memoryDay);
-  lcd.setCursor(16, 1);
-  lcd.print(currentDay);
+  
   
   lcd.setCursor(0, 2);
   lcd.print("Tin:     ");
@@ -35,12 +34,17 @@ void LCD()
   
   lcd.setCursor(12, 0);
   lcd.print("IR:");
-  lcd.setCursor(12, 1);
-  lcd.print("DAY=");
+//  lcd.setCursor(12, 1);
+//  lcd.print("DAY=");
+//  lcd.setCursor(16, 1);
+//  lcd.print(currentDay);
+
+  
   }
   
-    
-    
+  DateTime now = dt.now();  
+   lcd.setCursor(12, 1);
+   lcdDigits(now.hour()); lcd.print(":"); lcdDigits(now.minute()); lcd.print(":");lcdDigits(now.second());  
 }
 
 // время //
@@ -48,8 +52,7 @@ void LCD()
 //    lcdDigits(now.hour()); lcd.print(":"); lcdDigits(now.minute()); //lcd.print(":");lcdDigits(now.second(), DEC);  
 
 
-
-  void lcdDigits(int digits){
+void lcdDigits(int digits){
    // Функция для красивого вывода времени. Выводит ноль перед
    // односимвольными числами. &amp;amp;quot;5&amp;amp;quot; будет выведено как &amp;amp;quot;05&amp;amp;quot;
    lcd.print("");
@@ -57,3 +60,4 @@ void LCD()
    lcd.print('0');
    lcd.print(digits);  
 }
+ 
