@@ -44,7 +44,7 @@ void LCD()
   
   DateTime now = dt.now();  
    lcd.setCursor(12, 1);
-   lcdDigits(now.hour()); lcd.print(":"); lcdDigits(now.minute()); lcd.print(":");lcdDigits(now.second());  
+   lcdDigits(now.hour()); lcd.print(":"); lcdDigits(now.minute()); //lcd.print(":");lcdDigits(now.second());  
 }
 
 // время //

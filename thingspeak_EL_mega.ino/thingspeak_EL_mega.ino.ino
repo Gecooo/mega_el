@@ -61,7 +61,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
 DallasTemperature sensors(&oneWire);
 
-double Input, Output, Setpoint=0;
+double Input, Output, Setpoint = 0;
 double aggKp=160.0, aggKi=10.2, aggKd=8.0;       //настройки PID-регулятора
 //double consKp=8000, consKi=153.0, consKd=10.3;
 double consKp=100, consKi=4.0, consKd=5.5;
@@ -82,8 +82,10 @@ unsigned long previousMillis = 0;
 unsigned long prevMillissens = 0;
 unsigned long prevMillisLCD = 0;
 unsigned long prevMillishdc = 0;
+unsigned long abshummillis = 0;
+unsigned int startDayUnixtime; // день старта в памяти
 
-volatile bool flag_work = 0; // флаг кнопки включения процесса
+volatile bool flag_work = LOW; // флаг кнопки включения процесса
 
 char *api_key = "EPY2NM6967MVDEM5";
 // expand buffer size to your needs
@@ -210,12 +212,12 @@ void mqttData(void* response) {
       flag_work = 1;
       tone(buzzer_pin, 2000, 50);
       EEPROM_write(11, flag_work);      // записываем в память статус флага работы, чтобы при перзагрузки контроллера стартовал с этого же статуса
-      EEPROM_write(1, currentTime_day); //записываем день старта программы
+      EEPROM_write(5, currentTime_day); //записываем день старта программы
     }
     else if (data == "0") {
       flag_work = 0;
       EEPROM_write(11, flag_work);  // записываем в память статус флага работы, чтобы при перзагрузки контроллера стартовал с этого же статуса
-      EEPROM_write(1, 0);           //когда выключили процесс, стираем дату начала процесса
+      EEPROM_write(5, 0);           //когда выключили процесс, стираем дату начала процесса
     }
   }
   
@@ -239,7 +241,8 @@ void setup() {
   pinMode(vozduh_pin, OUTPUT); 
   digitalWrite(vozduh_pin, LOW); // нагреватель выключен
   pinMode (buzzer_pin, OUTPUT); //пищалка
-  attachInterrupt(1, myInterrupt, FALLING); //подключить прерывания на первый таймер пин 3
+  attachInterrupt(1, myInterrupt, FALLING); //подключить прерывания на первый таймер пин 2
+  //digitalWrite(2, 1);
   Serial.println("");
   Serial.println("EL-Client starting!");
    esp.wifiCb.attach(wifiCb); // wifi status change callback, optional (delete if not desired)
@@ -312,6 +315,7 @@ Serial.println("esp.GetWifiStatus()");
   lcd.clear();
 
 //EEPROM_read(10, Setpoint);
+EEPROM_read(5, startDayUnixtime);
 EEPROM_read(11, flag_work);
 if(flag_work) tone(buzzer_pin, 2000, 50);
 }
@@ -321,12 +325,12 @@ static uint32_t last;
 
 void loop() {
  int val ;
-unsigned int startDayUnixtime; // день старта в памяти
+
 
 ///////////////////
 DateTime now = dt.now();
   currentTime_day = (now.unixtime() / 86400L);  // текущий день
-  EEPROM_read(1, startDayUnixtime);  // здесь в каждом цикле идет запрос о дне работы 
+    // здесь в каждом цикле идет запрос о дне работы 
   currentDay = (currentTime_day - startDayUnixtime);  //но нет смысла спрашивать каждый раз, можно настроить запрос по времени
 // if (currentDay < 3) {   // если день работы менее 3 то влажность 85%
 //// if (currentHour <= 72) {
@@ -342,9 +346,6 @@ DateTime now = dt.now();
   vozduh();
   PID_termostat ();
   Nagrev ();
-  
-  
-
   
  // if we're connected make an REST request
   if(wifiConnected) {
@@ -366,8 +367,8 @@ DateTime now = dt.now();
       String tString = String(t);
       const char *tChar = tString.c_str(); 
 
-//      String OutputString = String(Output);
-//      const char *OutputChar = OutputString.c_str();
+      String AbshumString = String(Abshum);
+      const char *AbshumChar = AbshumString.c_str();
 
       String HRadString = String(HRad);
       const char *HRadChar = HRadString.c_str();
@@ -408,8 +409,8 @@ DateTime now = dt.now();
     sprintf(path_data + strlen(path_data), "%s", "&field4=");
     sprintf(path_data + strlen(path_data), "%s", hChar);
 
-//    sprintf(path_data + strlen(path_data), "%s", "&field5=");
-//    sprintf(path_data + strlen(path_data), "%s", OutputChar);
+    sprintf(path_data + strlen(path_data), "%s", "&field5=");
+    sprintf(path_data + strlen(path_data), "%s", AbshumChar);
 
     sprintf(path_data + strlen(path_data), "%s", "&field6=");
     sprintf(path_data + strlen(path_data), "%s", HRadChar);
@@ -483,11 +484,22 @@ int memoryFree() {
   return freeValue;
 }
 
+//void myInterrupt() {
+//  flag_work = !flag_work;
+//  EEPROM_write(11, flag_work);    //записываем в память статус работы программы, чтобы при перезагрузки контроллера стартовать с этого же статуса
+//  if (flag_work) { EEPROM_write(1, currentTime_day); tone(buzzer_pin, 2000, 100);} //записываем в память день старта программы
+//  if (!flag_work){ EEPROM_write(1, 0);}                            //стираем день старта программы
+//}
+
 void myInterrupt() {
+    static unsigned long millis_prev;
+    if(millis()-100 > millis_prev){
   flag_work = !flag_work;
   EEPROM_write(11, flag_work);    //записываем в память статус работы программы, чтобы при перезагрузки контроллера стартовать с этого же статуса
-  if (flag_work) { EEPROM_write(1, currentTime_day); tone(buzzer_pin, 2000, 100);} //записываем в память день старта программы
-  if (!flag_work){ EEPROM_write(1, 0);}                            //стираем день старта программы
+  if (flag_work) { EEPROM_write(5, currentTime_day); tone(buzzer_pin, 2000, 100);} //записываем в память день старта программы
+  if (!flag_work){ EEPROM_write(5, 0);}                            //стираем день старта программы
+  millis_prev = millis();
+    }
 }
 
 //пищалка////////////////////////////////////////////////////////////////////////
