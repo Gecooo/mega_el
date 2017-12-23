@@ -4,8 +4,8 @@ void LCD()
   if (LCDMillis - prevMillisLCD >= 1000) {
         prevMillisLCD = LCDMillis;
   lcd.setCursor(0, 0);
-  lcd.print("H.RAD:     "); //отсылка в сериал для Espeasy
-  lcd.setCursor(6, 0);
+  lcd.print("HRAD:     ");
+  lcd.setCursor(5, 0);
   lcd.print(HRad,1);
   lcd.setCursor(0, 1);
   lcd.print("CRad:     ");
@@ -43,8 +43,13 @@ void LCD()
   }
   
   DateTime now = dt.now();  
-   lcd.setCursor(12, 1);
+   lcd.setCursor(10, 1);
    lcdDigits(now.hour()); lcd.print(":"); lcdDigits(now.minute()); //lcd.print(":");lcdDigits(now.second());  
+   lcd.setCursor(16, 1); 
+   lcd.print("D:");
+   if (flag_work) lcd.print(currentDay);
+   if (currentDay > 100) lcd.print("-");
+   else lcd.print("-");
 }
 
 // время //

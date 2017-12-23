@@ -27,7 +27,9 @@ void PID_termostat()
       pwmWrite(INT1, Output);
       digitalWrite(INT2, LOW);
     }
-   
+    DateTime now = dt.now();
+    if (now.minute() >= 35 && now.minute() < 40 ) digitalWrite(vozduh_pin, HIGH); // включить воздух
+    else digitalWrite(vozduh_pin, LOW); // воздух выкл
   }
   else
   {

@@ -126,6 +126,7 @@ void mqttConnected(void* response) {
   mqtt.subscribe("/esp-link/ir");
   mqtt.subscribe("/esp-link/vkl");
   mqtt.subscribe("/esp-link/nagrev");
+  mqtt.subscribe("/esp-link/setpoint");
   
   //mqtt.subscribe("/esp-link/2", 1);
   //mqtt.publish("/esp-link/0", "test1");
@@ -165,11 +166,11 @@ void mqttData(void* response) {
 
   if (topic == "/esp-link/vozduh") {
     if (data == "1") {
-      digitalWrite(vozduh, HIGH); // включить нагреватель
+      digitalWrite(vozduh_pin, HIGH); // включить нагреватель
       vozduhmqtt = true;
     }
     else if (data == "0") {
-      digitalWrite(vozduh, LOW); // нагрев выкл
+      digitalWrite(vozduh_pin, LOW); // нагрев выкл
      vozduhmqtt = false;
     }
   }
@@ -199,13 +200,12 @@ void mqttData(void* response) {
   }
 
 
-//  if (topic == "/esp-link/setpoint")
-//  {
-//    
-//   // (atof(myStr));
-//Setpoint = data.toDouble();
-// EEPROM_write(10, Setpoint); 
-//  }
+  if (topic == "/esp-link/setpoint")
+  {
+      // (atof(myStr));
+Setpoint = data.toDouble();
+ EEPROM_write(10, Setpoint); 
+  }
 
   if (topic == "/esp-link/vkl") {
     if (data == "1") {
@@ -330,6 +330,7 @@ void loop() {
 ///////////////////
 DateTime now = dt.now();
   currentTime_day = (now.unixtime() / 86400L);  // текущий день
+  EEPROM_read(5, startDayUnixtime);
     // здесь в каждом цикле идет запрос о дне работы 
   currentDay = (currentTime_day - startDayUnixtime);  //но нет смысла спрашивать каждый раз, можно настроить запрос по времени
 // if (currentDay < 3) {   // если день работы менее 3 то влажность 85%
@@ -343,7 +344,7 @@ DateTime now = dt.now();
   esp.Process();
   Sens();
   LCD();
-  vozduh();
+  //vozduh();
   PID_termostat ();
   Nagrev ();
   
@@ -361,8 +362,8 @@ DateTime now = dt.now();
       String ColdradString = String(Coldrad);
       const char *ColdradChar = ColdradString.c_str(); 
 
-      String hString = String(h);
-      const char *hChar = hString.c_str();
+//      String hString = String(h);
+//      const char *hChar = hString.c_str();
       
       String tString = String(t);
       const char *tChar = tString.c_str(); 
@@ -373,8 +374,8 @@ DateTime now = dt.now();
       String HRadString = String(HRad);
       const char *HRadChar = HRadString.c_str();
       
-//      String SetpointString = String(Setpoint);
-//      const char *SetpointChar = SetpointString.c_str();
+      String SetpointString = String(Setpoint);
+      const char *SetpointChar = SetpointString.c_str();
 
       String hdc_tString = String(hdc_t);
       const char *hdc_tChar = hdc_tString.c_str();
@@ -407,7 +408,7 @@ DateTime now = dt.now();
     sprintf(path_data + strlen(path_data), "%s", tChar);
 
     sprintf(path_data + strlen(path_data), "%s", "&field4=");
-    sprintf(path_data + strlen(path_data), "%s", hChar);
+    sprintf(path_data + strlen(path_data), "%s", SetpointChar);
 
     sprintf(path_data + strlen(path_data), "%s", "&field5=");
     sprintf(path_data + strlen(path_data), "%s", AbshumChar);
@@ -445,28 +446,32 @@ DateTime now = dt.now();
     }
    }
 
-    if (connected && (millis()-last) > 4000) {
+    if (connected && (millis()-last) > 3000) {
     Serial.println("publishing");
     //char buf[12];
     char buf1[8];
     val = digitalRead(ledPin);          //Конвертирование целочисленных данных в строку, преобразование int
     itoa(val, buf1, 2);
-    mqtt.publish("/esp-link/led", buf1);
+    mqtt.publish("/esp-link/out/led", buf1);
 
     val = digitalRead(nagrev_pin);          //Конвертирование целочисленных данных в строку, преобразование int
     itoa(val, buf1, 2);
-    mqtt.publish("/esp-link/nagrev", buf1);
-
+    mqtt.publish("/esp-link/out/nagrev", buf1);
+//
     val = digitalRead(vozduh_pin);
     itoa(val, buf1, 2);
-    mqtt.publish("/esp-link/vozduh", buf1);
-
+    mqtt.publish("/esp-link/out/vozduh", buf1);
+//
     val = flag_work;
     itoa(val, buf1, 2);
-    mqtt.publish("/esp-link/vkl", buf1);
+    mqtt.publish("/esp-link/out/vkl", buf1);
 
+    val = digitalRead(IRPIN);
+    itoa(val, buf1, 2);
+    mqtt.publish("/esp-link/out/ir", buf1);
+//
 //    uint32_t t = cmd.GetTime();
-//    Serial.print("Time: "); Serial.println(t);
+////    Serial.print("Time: "); Serial.println(t);
      last = millis();
       }
   }
