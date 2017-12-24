@@ -62,11 +62,17 @@ OneWire oneWire(ONE_WIRE_BUS);
 DallasTemperature sensors(&oneWire);
 
 double Input, Output, Setpoint = 0;
+double Setpoint1, Input1, Output1;
 double aggKp=160.0, aggKi=10.2, aggKd=8.0;       //настройки PID-регулятора
 //double consKp=8000, consKi=153.0, consKd=10.3;
 double consKp=100, consKi=4.0, consKd=5.5;
 
 PID myPID(&Input, &Output, &Setpoint, consKp, consKi, consKd, REVERSE);       //PID-регулятор элемента пелетье
+
+double Kp1=2, Ki1=5, Kd1=1;
+PID myPID1(&Input1, &Output1, &Setpoint1, Kp1, Ki1, Kd1, DIRECT);
+int WindowSize = 1000;
+unsigned long windowStartTime;
 
 // arrays to hold device addresses
 DeviceAddress sensor4 = {0x28, 0xFF, 0x55, 0x6E, 0x80, 0x16, 0x5, 0x91};
@@ -96,6 +102,7 @@ char *api_key = "EPY2NM6967MVDEM5";
 #define nagrev_pin 26   //нагреватель
 #define vozduh_pin 28   //воздух
 #define buzzer_pin 9                   //пищалка
+#define setSampleTime 300            //время цикла ПИД
 ///////Memory////////
 extern void *__brkval;
 extern int __bss_end;
@@ -233,6 +240,7 @@ void setup() {
   Wire.begin();
   hdc1080.begin(0x40); 
   hdc1080.setResolution(1, 01);
+  windowStartTime = millis();
   pinMode (IRPIN, OUTPUT); //устанавливаем пин 5 как выход
   digitalWrite(IRPIN,LOW);
   //pinMode (VKL, INPUT);
@@ -291,6 +299,8 @@ Serial.println("esp.GetWifiStatus()");
   SetPinFrequencySafe(INT1, frequency);
   SetPinFrequencySafe(INT2, frequency);
   myPID.SetOutputLimits(80,254);    //лимит PID  
+  myPID1.SetOutputLimits(0, WindowSize);
+  myPID1.SetSampleTime(setSampleTime);
   dht.begin();
   sensors.begin();
   sensors.setResolution(sensor4, 10);
