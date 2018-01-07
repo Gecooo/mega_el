@@ -45,7 +45,8 @@ bool connected;
 bool nagrevmqtt = false;
 boolean wifiConnected = false;
 boolean vozduhmqtt = false;
-const unsigned long SendThingspeak = 15000;
+boolean avtonagrev = true;
+const unsigned long SendThingspeak = 20000;
 float HRad;
 float Coldrad;
 float h;
@@ -61,7 +62,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
 DallasTemperature sensors(&oneWire);
 
-double Input, Output, Setpoint = 0;
+double Input, Output, Setpoint = 3;
 double Setpoint1, Input1, Output1;
 double aggKp=160.0, aggKi=10.2, aggKd=8.0;       //настройки PID-регулятора
 //double consKp=8000, consKi=153.0, consKd=10.3;
@@ -69,7 +70,7 @@ double consKp=100, consKi=4.0, consKd=5.5;
 
 PID myPID(&Input, &Output, &Setpoint, consKp, consKi, consKd, REVERSE);       //PID-регулятор элемента пелетье
 
-double Kp1=2, Ki1=5, Kd1=1;
+double Kp1=160.0, Ki1=10.2, Kd1=8.0;
 PID myPID1(&Input1, &Output1, &Setpoint1, Kp1, Ki1, Kd1, DIRECT);
 int WindowSize = 1000;
 unsigned long windowStartTime;
@@ -89,9 +90,10 @@ unsigned long prevMillissens = 0;
 unsigned long prevMillisLCD = 0;
 unsigned long prevMillishdc = 0;
 unsigned long abshummillis = 0;
-unsigned int startDayUnixtime; // день старта в памяти
+unsigned long startDayUnixtime; // день старта в памяти
 
-volatile bool flag_work = LOW; // флаг кнопки включения процесса
+volatile bool flag_work = false; // флаг кнопки включения процесса
+volatile bool flag_currentTime_day = false;
 
 char *api_key = "EPY2NM6967MVDEM5";
 // expand buffer size to your needs
@@ -133,6 +135,7 @@ void mqttConnected(void* response) {
   mqtt.subscribe("/esp-link/ir");
   mqtt.subscribe("/esp-link/vkl");
   mqtt.subscribe("/esp-link/nagrev");
+  mqtt.subscribe("/esp-link/avtonagrev");
   mqtt.subscribe("/esp-link/setpoint");
   
   //mqtt.subscribe("/esp-link/2", 1);
@@ -193,6 +196,17 @@ void mqttData(void* response) {
     }
   }
 
+  if (topic == "/esp-link/avtonagrev") {
+    if (data == "1") {
+      //digitalWrite(nagrev_pin, HIGH); // включить нагреватель
+      avtonagrev = true;
+    }
+    else if (data == "0") {
+      //digitalWrite(vozduh, LOW); // нагрев выкл
+     avtonagrev = false;
+    }
+  }
+
   if (topic == "/esp-link/ir") {
     if (data == "1") {
       digitalWrite(IRPIN, HIGH);
@@ -206,7 +220,7 @@ void mqttData(void* response) {
     }
   }
 
-
+//strtoul(stringVar,pointer,10);
   if (topic == "/esp-link/setpoint")
   {
       // (atof(myStr));
@@ -218,12 +232,12 @@ Setpoint = data.toDouble();
     if (data == "1") {
       flag_work = 1;
       tone(buzzer_pin, 2000, 50);
-      EEPROM_write(11, flag_work);      // записываем в память статус флага работы, чтобы при перзагрузки контроллера стартовал с этого же статуса
+      EEPROM_write(11, 1);      // записываем в память статус флага работы, чтобы при перзагрузки контроллера стартовал с этого же статуса
       EEPROM_write(5, currentTime_day); //записываем день старта программы
     }
     else if (data == "0") {
       flag_work = 0;
-      EEPROM_write(11, flag_work);  // записываем в память статус флага работы, чтобы при перзагрузки контроллера стартовал с этого же статуса
+      EEPROM_write(11, 0);  // записываем в память статус флага работы, чтобы при перзагрузки контроллера стартовал с этого же статуса
       EEPROM_write(5, 0);           //когда выключили процесс, стираем дату начала процесса
     }
   }
@@ -249,7 +263,7 @@ void setup() {
   pinMode(vozduh_pin, OUTPUT); 
   digitalWrite(vozduh_pin, LOW); // нагреватель выключен
   pinMode (buzzer_pin, OUTPUT); //пищалка
-  attachInterrupt(1, myInterrupt, FALLING); //подключить прерывания на первый таймер пин 2
+  attachInterrupt(1, myInterrupt, RISING); //подключить прерывания на первый таймер пин 2 //RISING - когда на кнопе всегда HIGH, а при нажатии LOW.// FALLING - наоборот
   //digitalWrite(2, 1);
   Serial.println("");
   Serial.println("EL-Client starting!");
@@ -298,13 +312,16 @@ Serial.println("esp.GetWifiStatus()");
   InitTimersSafe();
   SetPinFrequencySafe(INT1, frequency);
   SetPinFrequencySafe(INT2, frequency);
-  myPID.SetOutputLimits(80,254);    //лимит PID  
+  myPID.SetOutputLimits(20,254);    //лимит PID  
   myPID1.SetOutputLimits(0, WindowSize);
   myPID1.SetSampleTime(setSampleTime);
   dht.begin();
   sensors.begin();
   sensors.setResolution(sensor4, 10);
   sensors.setResolution(sensor3, 10);
+  EEPROM_read(5, startDayUnixtime);
+  EEPROM_read(11, flag_work);
+
   lcd.init();                  //включаем lcd
   lcd.backlight(); 
   delay(15);
@@ -321,13 +338,12 @@ Serial.println("esp.GetWifiStatus()");
   lcd.print(".");
     delay(500);                // ждем 0.5 секунды
   lcd.print(".");
-    delay(2000);               // ждем 1 секунду
+  if(flag_work) tone(buzzer_pin, 2000, 50);
+    delay(1000);               // ждем 1 секунду
   lcd.clear();
 
 //EEPROM_read(10, Setpoint);
-EEPROM_read(5, startDayUnixtime);
-EEPROM_read(11, flag_work);
-if(flag_work) tone(buzzer_pin, 2000, 50);
+
 }
 
 static int count;
@@ -339,10 +355,37 @@ void loop() {
 
 ///////////////////
 DateTime now = dt.now();
+
   currentTime_day = (now.unixtime() / 86400L);  // текущий день
+
+ /////////// Реакция на события от прервания на кнопке  ///////////// 
+  if (flag_currentTime_day && flag_work) {
+    EEPROM_write(5, currentTime_day);
+    EEPROM_write(11, 1);  //записываем в память статус работы программы, чтобы при перезагрузки контроллера стартовать с этого же статуса
+    flag_currentTime_day = false;
+  }
+  if (flag_currentTime_day && !flag_work) {
+    EEPROM_write(5, 0);
+    EEPROM_write(11, 0);  //записываем в память статус работы программы, чтобы при перезагрузки контроллера стартовать с этого же статуса
+    flag_currentTime_day = false;
+  }
+
+////////////////////////////////////////////////////////////////////  
+  
   EEPROM_read(5, startDayUnixtime);
     // здесь в каждом цикле идет запрос о дне работы 
   currentDay = (currentTime_day - startDayUnixtime);  //но нет смысла спрашивать каждый раз, можно настроить запрос по времени
+
+   if (flag_work) {
+    lcd.setCursor(16, 1); 
+   lcd.print("D: ");
+   lcd.print(currentDay);
+   }
+   //if (currentDay > 100) lcd.print("-");
+   else {
+     lcd.setCursor(16, 1); 
+   lcd.print("D: -");
+      }
 // if (currentDay < 3) {   // если день работы менее 3 то влажность 85%
 //// if (currentHour <= 72) {
 //  //Setpoint = map(currentHour * 10, 0, 720, 170, 70);
@@ -353,17 +396,18 @@ DateTime now = dt.now();
 /////////////////////////
   esp.Process();
   Sens();
-  LCD();
-  //vozduh();
-  PID_termostat ();
   Nagrev ();
+  LCD();
+  vozduh();
+  PID_termostat ();
+  
   
  // if we're connected make an REST request
   if(wifiConnected) {
     unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= SendThingspeak) {
     // save the last time you blinked the LED
-    previousMillis = currentMillis;
+   
 
    
       String tempoutString = String(tempout);
@@ -454,6 +498,8 @@ DateTime now = dt.now();
       Serial.print("Response: ");
       Serial.println(response);
     }
+
+     previousMillis = currentMillis;
    }
 
     if (connected && (millis()-last) > 3000) {
@@ -468,6 +514,10 @@ DateTime now = dt.now();
     itoa(val, buf1, 2);
     mqtt.publish("/esp-link/out/nagrev", buf1);
 //
+    val = avtonagrev;          //Конвертирование целочисленных данных в строку, преобразование int
+    itoa(val, buf1, 2);
+    mqtt.publish("/esp-link/out/avtonagrev", buf1);
+
     val = digitalRead(vozduh_pin);
     itoa(val, buf1, 2);
     mqtt.publish("/esp-link/out/vozduh", buf1);
@@ -506,16 +556,7 @@ int memoryFree() {
 //  if (!flag_work){ EEPROM_write(1, 0);}                            //стираем день старта программы
 //}
 
-void myInterrupt() {
-    static unsigned long millis_prev;
-    if(millis()-100 > millis_prev){
-  flag_work = !flag_work;
-  EEPROM_write(11, flag_work);    //записываем в память статус работы программы, чтобы при перезагрузки контроллера стартовать с этого же статуса
-  if (flag_work) { EEPROM_write(5, currentTime_day); tone(buzzer_pin, 2000, 100);} //записываем в память день старта программы
-  if (!flag_work){ EEPROM_write(5, 0);}                            //стираем день старта программы
-  millis_prev = millis();
-    }
-}
+
 
 //пищалка////////////////////////////////////////////////////////////////////////
 void buzzer(int duration) {

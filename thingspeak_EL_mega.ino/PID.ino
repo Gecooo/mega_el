@@ -2,6 +2,10 @@ void PID_termostat()
 {
   if (flag_work) // если нажата кнопка включить запускаем работу пелеть и ПИД регулятора
   {
+    //if (currentDay < 1) Setpoint = 12;
+//    if (currentDay >= 0 && hdc_t >= 13.00 && hdc_h >= 75.00) Setpoint = 0;
+//    if (currentDay >= 0 && hdc_t < 13.00 && hdc_h < 72.00) Setpoint = 5;
+   // else Setpoint = 0;
   Input = Coldrad;
   double gap = abs(Setpoint-Input); //distance away from setpoint
   if (gap < 1.00)
@@ -27,10 +31,7 @@ void PID_termostat()
       pwmWrite(INT1, Output);
       digitalWrite(INT2, LOW);
     }
-    DateTime now = dt.now();
-    if (now.minute() >= 35 && now.minute() < 40 ) digitalWrite(vozduh_pin, HIGH); // включить воздух
-    else digitalWrite(vozduh_pin, LOW); // воздух выкл
-  }
+   }
   else
   {
     pwmWrite(INT1, 0);

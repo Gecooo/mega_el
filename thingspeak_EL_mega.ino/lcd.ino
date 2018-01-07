@@ -45,11 +45,7 @@ void LCD()
   DateTime now = dt.now();  
    lcd.setCursor(10, 1);
    lcdDigits(now.hour()); lcd.print(":"); lcdDigits(now.minute()); //lcd.print(":");lcdDigits(now.second());  
-   lcd.setCursor(16, 1); 
-   lcd.print("D:");
-   if (flag_work) lcd.print(currentDay);
-   if (currentDay > 100) lcd.print("-");
-   else lcd.print("-");
+   
 }
 
 // время //
