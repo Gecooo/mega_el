@@ -1,3 +1,5 @@
+#include <ArduinoJson.h>
+
 #include <EEPROM2.h>
 #include <avr/wdt.h>
 #include <ELClientCmd.h>
